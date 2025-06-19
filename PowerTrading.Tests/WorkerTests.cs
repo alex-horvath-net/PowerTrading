@@ -17,7 +17,7 @@ public class WorkerTests {
         _worker = new Worker(_mockReportService.Object, _mockLogger.Object, _options, _mockTime.Object);
     }
 
-  
+
 
     [Fact]
     public async Task Cancellation_Stops_Execution_Gracefully() {
@@ -27,7 +27,7 @@ public class WorkerTests {
         _mockReportService
             .Setup(s => s.GenerateAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .Returns(async (DateTime dt, CancellationToken token) => {
-                await Task.Delay(5000, token);
+                await Task.Delay(5000, token); // Simulate long running operation that supports cancellation
                 return "done";
             });
 
@@ -35,25 +35,25 @@ public class WorkerTests {
         await _worker.StartAsync(cts.Token);
         var executeTask = _worker.ExecuteTask;
 
-        await Task.Delay(500); // Start work
+        await Task.Delay(500); // Allow the work to start
 
         cts.Cancel(); // Request cancellation
 
         try {
             if (executeTask != null)
-                await executeTask;
+                await executeTask; // Await the processing task which should cancel
         } catch (OperationCanceledException) {
-            // Expected, do nothing
+            // Expected cancellation, do nothing
         }
 
         await _worker.StopAsync(CancellationToken.None);
         _worker.Dispose();
 
-        // Assert
+        // Assert: Verify the cancellation log was written exactly once
         _mockLogger.Verify(x => x.Log(
             LogLevel.Information,
             It.IsAny<EventId>(),
-            It.Is<It.IsAnyType>((v, _) => v.ToString().Contains("Execution loop cancelled.")),
+            It.Is<It.IsAnyType>((v, _) => v.ToString().Contains("Execution loop cancelled")),
             null,
             It.IsAny<Func<It.IsAnyType, Exception, string>>()),
             Times.Once);

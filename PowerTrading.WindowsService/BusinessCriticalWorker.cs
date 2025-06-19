@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Concurrent;
+using System.Text;
 using Microsoft.Extensions.Options;
 using PowerTrading.Reporting.IntraDayReport;
 
@@ -9,13 +11,13 @@ namespace PowerTrading.WindowsService {
         private readonly WorkerSettings _settings;
         private readonly ITime _time;
 
-        private readonly ConcurrentQueue<DateTime> _scheduledRuns = new();
+        private readonly ConcurrentQueue<Tuple<Guid, DateTime>> _scheduledRuns = new();
         private readonly SemaphoreSlim _semaphore = new(1, 1);
         private readonly SemaphoreSlim _processingLock = new(1, 1);
 
         private Task? _processingTask;
         public Task? ProcessingTask => _processingTask;
-        public BusinessCriticalWorker( 
+        public BusinessCriticalWorker(
             ILogger<TWorker> logger,
             IOptions<WorkerSettings> options,
             ITime time) {
@@ -36,26 +38,29 @@ namespace PowerTrading.WindowsService {
 
         protected override async Task ExecuteAsync(CancellationToken token) {
             _logger.LogInformation("Execution loop starting...");
+            Guid runId = default;
+            DateTime runTime = default;
 
             try {
                 var interval = TimeSpan.FromMinutes(_settings.ExtractIntervalMinutes);
 
                 while (!token.IsCancellationRequested) {
-                    var scheduledRun = _time.GetTime();
-                    _scheduledRuns.Enqueue(scheduledRun);
-                    _logger.LogInformation($"Scheduled run enqueued for {scheduledRun:O}");
+                    runId = Guid.NewGuid();
+                    runTime = _time.GetTime();
+                    _scheduledRuns.Enqueue(Tuple.Create(runId, runTime));
+                    _logger.LogInformation("Scheduled run enqueued for RunTime: {RunTime} RunId: {RunId} ",  runTime, runId);
 
                     await StartProcessorIfNotRunningAsync(token);
 
                     await Task.Delay(interval, token);
                 }
             } catch (OperationCanceledException) {
-                _logger.LogInformation("Execution loop cancelled.");
+                _logger.LogInformation("Execution loop cancelled  RunTime: {RunTime} RunId: {RunId} ",  runTime, runId);
             } catch (Exception ex) {
-                _logger.LogError(ex, "Unexpected error in execution loop.");
+                _logger.LogError(ex, "Unexpected error in execution loop RunTime: {RunTime} RunId: {RunId} ", runTime, runId);
                 throw;
             } finally {
-                _logger.LogInformation("Execution loop stopping.");
+                _logger.LogInformation("Execution loop stopping. RunTime: {RunTime} RunId: {RunId} ", runTime, runId);
             }
         }
 
@@ -77,18 +82,21 @@ namespace PowerTrading.WindowsService {
             }
 
             try {
-                while (_scheduledRuns.TryDequeue(out var scheduledRun)) {
+                while (_scheduledRuns.TryDequeue(out var schedule)) {
                     token.ThrowIfCancellationRequested();
-
+                    var runId = schedule.Item1;
+                    var runTime = schedule.Item2;
                     try {
-                        _logger.LogInformation($"Starting work for scheduled run at {scheduledRun:O}");
-                        await WorkAsync(scheduledRun, token);
-                        _logger.LogInformation($"Completed work for scheduled run at {scheduledRun:O}");
+                        _logger.LogInformation("Starting work for RunTime {RunTime} RunId: {RunId} ", runTime, runId);
+
+                        await WorkAsync(runId, runTime, token);
+
+                        _logger.LogInformation("Completed work for RunTime {RunTime} RunId: {RunId} ", runTime, runId);
                     } catch (OperationCanceledException) {
                         _logger.LogWarning("Work cancelled.");
                         throw; // Propagate cancellation
                     } catch (Exception ex) {
-                        _logger.LogError(ex, $"Error processing scheduled run at {scheduledRun:O}");
+                        _logger.LogError(ex, "Error processing scheduled RunTime {RunTime} RunId: {RunId} ", runTime, runId);
                         // Swallow other exceptions so loop continues
                     }
                 }
@@ -96,7 +104,7 @@ namespace PowerTrading.WindowsService {
                 _semaphore.Release();
             }
         }
-        public abstract Task WorkAsync(DateTime scheduledRun, CancellationToken token);
+        public abstract Task WorkAsync(Guid runId, DateTime runTime, CancellationToken token);
 
         public override void Dispose() {
             base.Dispose();

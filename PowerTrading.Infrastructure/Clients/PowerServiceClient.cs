@@ -12,15 +12,15 @@ public class PowerServiceClient : IPowerServiceClient {
         _nativePowerService = nativePowerService;
     }
 
-    public async Task<IEnumerable<Domain.PowerTrade>> GetTradesAsync(DateTime scheduledRun, CancellationToken token) {
-        var nativePowerTrades = await GetTradesIfNotCanceledAsync(scheduledRun,  token);
+    public async Task<IEnumerable<Domain.PowerTrade>> GetTradesAsync(DateTime runTime, CancellationToken token) {
+        var nativePowerTrades = await GetTradesIfNotCanceledAsync(runTime,  token);
         var domainPowerTrades = nativePowerTrades.Select(MapPowerTrade).ToArray();
         return domainPowerTrades; // PowerServiceClient doesn't leak any PowerService.dll type
     }
 
-    private  async Task<IEnumerable<PowerTrade>> GetTradesIfNotCanceledAsync(DateTime scheduledRun, CancellationToken token) {
+    private  async Task<IEnumerable<PowerTrade>> GetTradesIfNotCanceledAsync(DateTime runTime, CancellationToken token) {
         //  GetTradesAsync has no CancellationToken parameter    
-        var getTradesTask = _nativePowerService.GetTradesAsync(scheduledRun.Date);
+        var getTradesTask = _nativePowerService.GetTradesAsync(runTime.Date);
         var cancelableTask = Task.Delay(Timeout.Infinite, token); // create a cancelable task that will complete when the token is cancelled
         token.ThrowIfCancellationRequested();
 

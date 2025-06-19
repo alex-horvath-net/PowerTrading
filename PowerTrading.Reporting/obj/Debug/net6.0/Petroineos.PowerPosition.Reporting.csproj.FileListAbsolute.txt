@@ -1,0 +1,15 @@
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\bin\Debug\net6.0\Petroineos.PowerPosition.Reporting.deps.json
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\bin\Debug\net6.0\Petroineos.PowerPosition.Reporting.dll
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\bin\Debug\net6.0\Petroineos.PowerPosition.Reporting.pdb
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\bin\Debug\net6.0\Petroineos.PowerPosition.Domain.dll
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\bin\Debug\net6.0\Petroineos.PowerPosition.Domain.pdb
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\obj\Debug\net6.0\Petroineos.PowerPosition.Reporting.csproj.AssemblyReference.cache
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\obj\Debug\net6.0\Petroineos.PowerPosition.Reporting.GeneratedMSBuildEditorConfig.editorconfig
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\obj\Debug\net6.0\Petroineos.PowerPosition.Reporting.AssemblyInfoInputs.cache
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\obj\Debug\net6.0\Petroineos.PowerPosition.Reporting.AssemblyInfo.cs
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\obj\Debug\net6.0\Petroineos.PowerPosition.Reporting.csproj.CoreCompileInputs.cache
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\obj\Debug\net6.0\Petroine.15DD38E7.Up2Date
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\obj\Debug\net6.0\Petroineos.PowerPosition.Reporting.dll
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\obj\Debug\net6.0\refint\Petroineos.PowerPosition.Reporting.dll
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\obj\Debug\net6.0\Petroineos.PowerPosition.Reporting.pdb
+C:\src\Petroineos\Petroineos.PowerPosition\Petroineos.PowerPosition.Services\obj\Debug\net6.0\ref\Petroineos.PowerPosition.Reporting.dll
