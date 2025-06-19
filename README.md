@@ -53,4 +53,5 @@ This solution implements a **reliable Windows Service** for generating intra-day
 - **Centralised error handling:** Exceptions in report generation are logged without stopping the service.
 - **Configuration-driven:** Scheduling intervals and output paths are configurable for flexible deployment.
 - **Separation of concerns:** Clear layering between service orchestration, business logic, and infrastructure.
+- **Retry mechanisim** via Polly
 
