@@ -1,0 +1,54 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36203.30
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerTrading.Domain", "PowerTrading.Domain\PowerTrading.Domain.csproj", "{C96FDB9C-CC97-055D-9E33-C857F6C0061E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerTrading.Infrastructure", "PowerTrading.Infrastructure\PowerTrading.Infrastructure.csproj", "{B9744809-9228-FA45-8722-397253909964}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerTrading.Reporting", "PowerTrading.Reporting\PowerTrading.Reporting.csproj", "{EE753161-1333-8192-0EE6-CE81C63292D2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerTrading.WindowsService", "PowerTrading.WindowsService\PowerTrading.WindowsService.csproj", "{D41B3757-DA27-FE60-8F40-F15041F8C608}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PowerTrading.Tests", "PowerTrading.Tests\PowerTrading.Tests.csproj", "{BB0CC373-D99D-EA9E-F11D-9F51E856ECA6}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{8EC462FD-D22E-90A8-E5CE-7E832BA40C5D}"
+	ProjectSection(SolutionItems) = preProject
+		.gitgnore = .gitgnore
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C96FDB9C-CC97-055D-9E33-C857F6C0061E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C96FDB9C-CC97-055D-9E33-C857F6C0061E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C96FDB9C-CC97-055D-9E33-C857F6C0061E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C96FDB9C-CC97-055D-9E33-C857F6C0061E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B9744809-9228-FA45-8722-397253909964}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B9744809-9228-FA45-8722-397253909964}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B9744809-9228-FA45-8722-397253909964}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B9744809-9228-FA45-8722-397253909964}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EE753161-1333-8192-0EE6-CE81C63292D2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EE753161-1333-8192-0EE6-CE81C63292D2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EE753161-1333-8192-0EE6-CE81C63292D2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EE753161-1333-8192-0EE6-CE81C63292D2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D41B3757-DA27-FE60-8F40-F15041F8C608}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D41B3757-DA27-FE60-8F40-F15041F8C608}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D41B3757-DA27-FE60-8F40-F15041F8C608}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D41B3757-DA27-FE60-8F40-F15041F8C608}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BB0CC373-D99D-EA9E-F11D-9F51E856ECA6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BB0CC373-D99D-EA9E-F11D-9F51E856ECA6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BB0CC373-D99D-EA9E-F11D-9F51E856ECA6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BB0CC373-D99D-EA9E-F11D-9F51E856ECA6}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {E5FD63CB-1F16-4F94-8666-F20C6DA0DFF0}
+	EndGlobalSection
+EndGlobal
