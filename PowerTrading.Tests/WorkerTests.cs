@@ -2,8 +2,10 @@
 using Microsoft.Extensions.Options;
 using PowerTrading.Reporting.IntraDayReport;
 using PowerTrading.WindowsService;
+using System.Threading;
 
 namespace PowerTrading.Tests;
+
 public class WorkerTests {
     private readonly Mock<IIntraDayReportService> _mockReportService = new();
     private readonly Mock<ILogger<Worker>> _mockLogger = new();
@@ -17,7 +19,36 @@ public class WorkerTests {
         _worker = new Worker(_mockReportService.Object, _mockLogger.Object, _options, _mockTime.Object);
     }
 
+    [Fact]
+    public async Task HappyPath_WorkAsync_Is_Called_At_Least_Once() {
+        // Arrange
+        var cts = new CancellationTokenSource();
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        _mockReportService
+            .Setup(s => s.GenerateAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("fakepath")
+            .Callback(() => tcs.TrySetResult(true));
+
+        // Act
+        await _worker.StartAsync(cts.Token);
+        var executeTask = _worker.ProcessingTask;
+
+        // Wait for work to start
+        var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+
+        // Assert
+        completedTask.Should().Be(tcs.Task, "WorkAsync should have been called within timeout");
+        _mockReportService.Verify(s => s.GenerateAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
+
+        // Cleanup
+        cts.Cancel();
+        if (executeTask != null) {
+            try { await executeTask; } catch (OperationCanceledException) { }
+        }
+        await _worker.StopAsync(CancellationToken.None);
+        _worker.Dispose();
+    }
 
     [Fact]
     public async Task Cancellation_Stops_Execution_Gracefully() {
@@ -27,29 +58,26 @@ public class WorkerTests {
         _mockReportService
             .Setup(s => s.GenerateAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
             .Returns(async (DateTime dt, CancellationToken token) => {
-                await Task.Delay(5000, token); // Simulate long running operation that supports cancellation
+                await Task.Delay(5000, token);
                 return "done";
             });
 
         // Act
         await _worker.StartAsync(cts.Token);
-        var executeTask = _worker.ExecuteTask;
+        var executeTask = _worker.ProcessingTask;
 
-        await Task.Delay(500); // Allow the work to start
+        await Task.Delay(500); // Give some time to start work
 
         cts.Cancel(); // Request cancellation
 
         try {
             if (executeTask != null)
-                await executeTask; // Await the processing task which should cancel
+                await executeTask;
         } catch (OperationCanceledException) {
-            // Expected cancellation, do nothing
+            // Expected
         }
 
-        await _worker.StopAsync(CancellationToken.None);
-        _worker.Dispose();
-
-        // Assert: Verify the cancellation log was written exactly once
+        // Assert
         _mockLogger.Verify(x => x.Log(
             LogLevel.Information,
             It.IsAny<EventId>(),
@@ -57,13 +85,16 @@ public class WorkerTests {
             null,
             It.IsAny<Func<It.IsAnyType, Exception, string>>()),
             Times.Once);
+
+        // Cleanup
+        await _worker.StopAsync(CancellationToken.None);
+        _worker.Dispose();
     }
 
     [Fact]
     public async Task Overlapping_Work_Is_Prevented() {
         // Arrange
         var cts = new CancellationTokenSource();
-
         var tcs = new TaskCompletionSource<string>();
 
         _mockReportService
@@ -73,24 +104,68 @@ public class WorkerTests {
 
         // Act
         await _worker.StartAsync(cts.Token);
-        var executeTask = _worker.ExecuteTask;
+        var executeTask = _worker.ProcessingTask;
 
         await Task.Delay(200); // Allow first call to start
-
-        await Task.Delay(1500); // Trigger second scheduled run (should be queued, not run concurrently)
+        await Task.Delay(1500); // Trigger second scheduled run (should be queued)
 
         tcs.SetResult("done"); // Complete first call
 
         cts.Cancel();
 
-        if (executeTask != null)
-            await executeTask;
-
-        await _worker.StopAsync(CancellationToken.None);
-        _worker.Dispose();
+        if (executeTask != null) {
+            try { await executeTask; } catch (OperationCanceledException) { }
+        }
 
         // Assert
         _mockReportService.Verify(s => s.GenerateAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.AtLeast(1));
-        // Semaphore prevents overlap, so no concurrency issues here
+
+        // Cleanup
+        await _worker.StopAsync(CancellationToken.None);
+        _worker.Dispose();
+    }
+
+    [Fact]
+    public async Task NoScheduledRun_IsMissed() {
+        // Arrange
+        var cts = new CancellationTokenSource();
+
+        int runsScheduled = 0;
+        int runsProcessed = 0;
+
+        _mockReportService
+            .Setup(s => s.GenerateAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Returns(async (DateTime dt, CancellationToken token) => {
+                Interlocked.Increment(ref runsProcessed);
+                await Task.Delay(100, token);
+                return "done";
+            });
+
+        _mockTime
+            .Setup(t => t.GetTime(default))
+            .Returns(() => {
+                Interlocked.Increment(ref runsScheduled);
+                return DateTime.UtcNow;
+            });
+
+        // Act
+        await _worker.StartAsync(cts.Token);
+        var executeTask = _worker.ProcessingTask;
+
+        // Wait for multiple runs to schedule and process
+        await Task.Delay(3500);
+
+        cts.Cancel();
+
+        if (executeTask != null) {
+            try { await executeTask; } catch (OperationCanceledException) { }
+        }
+
+        // Assert
+        runsProcessed.Should().Be(runsScheduled, "No scheduled run should be missed");
+
+        // Cleanup
+        await _worker.StopAsync(CancellationToken.None);
+        _worker.Dispose();
     }
 }
