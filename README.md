@@ -4,11 +4,9 @@
 
 This solution implements a **reliable Windows Service** for generating intra-day power position reports for power traders.
 
----
+# Modules and Responsibilities
 
-## Modules and Responsibilities
-
-### PowerTrading.WindowsService
+## PowerTrading.WindowsService
 - Responsible solely for scheduling the report generation as a Windows Service. Does not contain actual business logic.
 - This section in `appsettings.json` contains the scheduling configuration for the Windows Service worker.
   **`ExtractIntervalMinutes`** specifies how often (in minutes) the worker triggers the report generation.
@@ -22,11 +20,11 @@ This solution implements a **reliable Windows Service** for generating intra-day
 - Uses async semaphores to prevent overlapping executions.
 - Handles cancellation tokens for graceful shutdown.
 
-### PowerTrading.Reporting
+## PowerTrading.Reporting
 - Responsible for orchestrating the business process framework, specifically a simple Extract, Transform, Load (ETL) pipeline. Detailed explanation below.  
 - Provides a clean, independent interface for generating reports, decoupled from the Windows Service scheduling concerns.
 
-### PowerTrading.Infrastructure
+## PowerTrading.Infrastructure
 - Responsible for defining the infrastructure-related work steps.  
 - **PowerServiceClient** encapsulates the consumption logic of `PowerService.dll` and maps the native DLL types to domain types.  
   The method `IPowerService.GetTradesAsync` receives the parameter `runTime`, which comes from the Windows Service.  
@@ -43,7 +41,7 @@ This solution implements a **reliable Windows Service** for generating intra-day
 - **LondonTime** is responsible for calculating the exact London local time
 
 
-### PowerTrading.Domain 
+## PowerTrading.Domain 
 - Encapsulate domain entities, business rules.
 - PowerPeriod, PowerTrade, PowerPosition, PowerPositionAggregator
 
@@ -56,8 +54,3 @@ This solution implements a **reliable Windows Service** for generating intra-day
 - **Configuration-driven:** Scheduling intervals and output paths are configurable for flexible deployment.
 - **Separation of concerns:** Clear layering between service orchestration, business logic, and infrastructure.
 
----
-
-## Summary
-
-This solution combines modern async programming patterns and best practices to deliver precise, fault-tolerant, and maintainable power trading report generation suitable for mission-critical financial environments.
