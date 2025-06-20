@@ -2,7 +2,8 @@
 
 ## Overview
 
-This solution implements a **reliable Windows Service** for generating intra-day power position reports for power traders.
+Power traders need a report generated during the day (intra-day) that shows how much electricity they will have bought or sold for each hour of the next day (the “day-ahead power position”). This helps them plan and manage their trading positions in advance.
+This solution implements a **reliable Windows Service** for generating intra-day power position reports.
 
 # Modules and Responsibilities
 
@@ -15,19 +16,21 @@ This solution implements a **reliable Windows Service** for generating intra-day
     "ExtractIntervalMinutes": 15
   }
 ```
-- Once the execution is scheduled, a RunId and a RunTime (London local time) help the traceability.
+- Once the execution receives a run signal, a RunId and a RunTime (in London local time) will be generated. This supports structured logging and traceability.
 - Implements a queue-based scheduling system to guarantee no scheduled run is missed.
 - Uses async semaphores to prevent overlapping executions.
 - Handles cancellation tokens for graceful shutdown.
 
 ## PowerTrading.Reporting
-- Responsible for orchestrating the business process framework, specifically a simple Extract, Transform, Load (ETL) pipeline. Detailed explanation below.  
+- Responsible for orchestrating the business process as Extract, Transform, Load (ETL) pipeline.   
 - Provides a clean, independent interface for generating reports, decoupled from the Windows Service scheduling concerns.
 
 ## PowerTrading.Infrastructure
-- Responsible for defining the infrastructure-related work steps.  
+- Responsible for defining the infrastructure-related work steps. Each of them is self-defined and confined.
+- **LondonTime** is responsible for calculating the exact London local time
 - **PowerServiceClient** encapsulates the consumption logic of `PowerService.dll` and maps the native DLL types to domain types.  
-  The method `IPowerService.GetTradesAsync` receives the parameter `runTime`, which comes from the Windows Service.  
+  The method `PowerService / GetTradesAsync` receives the parameter `runTime`, which comes from the Windows Service and provides native PowerTrade or PowerServiceException.
+  So the client ensures cancellation, a retry mechanism and transforms the native raw data to domain.   
 - **CsvExporter** encapsulates the actual report generation. It transforms a `List<PowerTrading.Domain.PowerPosition>` into CSV format.  
   This section in `appsettings.json` contains the CSV configuration:  
 
@@ -38,12 +41,13 @@ This solution implements a **reliable Windows Service** for generating intra-day
     "DecimalPlaces": 3
   }
   ```
-- **LondonTime** is responsible for calculating the exact London local time
+
 
 
 ## PowerTrading.Domain 
 - Encapsulate domain entities, business rules.
 - PowerPeriod, PowerTrade, PowerPosition, PowerPositionAggregator
+- PowerPositionAggregator transforms PowerTrades and PowerPositions. 
 
 ## Key Design Decisions
 
@@ -53,4 +57,5 @@ This solution implements a **reliable Windows Service** for generating intra-day
 - **Centralised error handling:** Exceptions in report generation are logged without stopping the service.
 - **Configuration-driven:** Scheduling intervals and output paths are configurable for flexible deployment.
 - **Separation of concerns:** Clear layering between service orchestration, business logic, and infrastructure.
+- **Retry mechanisim** via Polly
 
