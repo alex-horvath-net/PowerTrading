@@ -1,9 +1,12 @@
-﻿using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using PowerTrading.Infrastructure.Csv;
 using PowerTrading.Reporting.IntraDayReport;
 
 namespace PowerTrading.Tests;
 public class CsvExporterTests {
+    private readonly Mock<ILogger<CsvExporter>> _mockLogger = new Mock<ILogger<CsvExporter>>();
+
     [Fact]
     public async Task Export_CreatesCsvFileWithCorrectContent() {
         // Arrange
@@ -18,7 +21,7 @@ public class CsvExporterTests {
             Separator = ";",
             DecimalPlaces = 3
         });
-        var exporter = new CsvExporter(mockTime.Object, options);
+        var exporter = new CsvExporter(mockTime.Object, options, _mockLogger.Object);
         var powerPositions = new List<Domain.PowerPosition>
         {
             new Domain.PowerPosition { Period = 1, Volume = 100 },

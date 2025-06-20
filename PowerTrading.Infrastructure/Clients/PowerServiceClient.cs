@@ -1,4 +1,5 @@
-﻿using Polly;
+﻿using Microsoft.Extensions.Logging;
+using Polly;
 using Polly.Retry;
 using PowerTrading.Reporting.IntraDayReport;
 using Services;
@@ -11,19 +12,20 @@ namespace PowerTrading.Infrastructure.Clients;
 public class PowerServiceClient : IPowerServiceClient {
     private readonly IPowerService _nativePowerService;
     private readonly AsyncRetryPolicy<IEnumerable<PowerTrade>> _retryPolicy;
+    private readonly ILogger<PowerServiceClient> _logger;
 
-    public PowerServiceClient(IPowerService nativePowerService) {
-        _nativePowerService = nativePowerService;
+    public PowerServiceClient(IPowerService nativePowerService, ILogger<PowerServiceClient> logger) {
+        _nativePowerService = nativePowerService ?? throw new ArgumentNullException(nameof(nativePowerService));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         // Define a retry policy: 3 retries with exponential backoff, ignoring cancellation exceptions
         _retryPolicy = Policy<IEnumerable<PowerTrade>>
             .Handle<Exception>(ex => !(ex is OperationCanceledException))
             .WaitAndRetryAsync(
                 retryCount: 3,
-                sleepDurationProvider: attempt => TimeSpan.FromSeconds(Math.Pow(2, attempt)),
+                sleepDurationProvider: attempt => TimeSpan.FromSeconds(Math.Pow(1.5, attempt)),
                 onRetry: (exception, timespan, retryCount, context) => {
-                    // Optional: log retry here, e.g. using ILogger if you inject it
-                    // _logger.LogWarning($"Retry {retryCount} after {timespan.TotalSeconds}s due to: {exception.Message}");
+                    _logger.LogWarning("Retry {RetryCount} after {TotalSeconds}s due to: {ExceptionMessage}", retryCount, timespan.TotalSeconds, exception.Exception.Message);
                 });
     }
 

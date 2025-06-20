@@ -1,10 +1,13 @@
-﻿using PowerTrading.Infrastructure.Clients;
+﻿using Microsoft.Extensions.Logging;
+using PowerTrading.Infrastructure.Clients;
 using PowerTrading.Reporting.IntraDayReport;
+using PowerTrading.WindowsService;
 using Services; // Namespace for native PowerService types
 
 namespace PowerTrading.Tests;
 
 public class PowerServiceClientTests {
+    private readonly Mock<ILogger<PowerServiceClient>> _mockLogger = new();
 
     [Fact]
     public async Task GetTradesAsync_Normal_Is_Random() {
@@ -13,7 +16,7 @@ public class PowerServiceClientTests {
         var powerService = new PowerService();
         using var cts = new CancellationTokenSource();
         var now = new DateTime(2025, 6, 17, 10, 33, 0);
-        var client = new PowerServiceClient(powerService);
+        var client = new PowerServiceClient(powerService, _mockLogger.Object);
 
         // Act
         var powerTrades = await client.GetTradesAsync(now, cts.Token);
@@ -31,7 +34,7 @@ public class PowerServiceClientTests {
         var powerService = new PowerService();
         using var cts = new CancellationTokenSource();
         var now = new DateTime(2025, 6, 17, 10, 33, 0);
-        var client = new PowerServiceClient(powerService);
+        var client = new PowerServiceClient(powerService, _mockLogger.Object);
 
         // Act
         var powerTrades = await client.GetTradesAsync(now, cts.Token);
@@ -52,7 +55,7 @@ public class PowerServiceClientTests {
         var powerService = new PowerService();
         using var cts = new CancellationTokenSource();
         var now = new DateTime(2025, 6, 17, 10, 33, 0);
-        var client = new PowerServiceClient(powerService);
+        var client = new PowerServiceClient(powerService, _mockLogger.Object);
 
         // Act
         await Assert.ThrowsAsync<PowerServiceException>( () =>  
@@ -75,7 +78,7 @@ public class PowerServiceClientTests {
             .Setup(s => s.GetTradesAsync(now))
             .ReturnsAsync(nativePowerTrades);
 
-        var client = new PowerServiceClient(mockPowerService.Object);
+        var client = new PowerServiceClient(mockPowerService.Object, _mockLogger.Object);
         using var cts = new CancellationTokenSource();
 
         // Act
@@ -112,7 +115,7 @@ public class PowerServiceClientTests {
               .ReturnsAsync(nativePowerTrades);
 
 
-        var client = new PowerServiceClient(mockPowerService.Object);
+        var client = new PowerServiceClient(mockPowerService.Object, _mockLogger.Object);
 
         using var cts = new CancellationTokenSource();
         cts.Cancel();

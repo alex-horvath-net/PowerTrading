@@ -1,16 +1,30 @@
 ﻿using System.Globalization;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Polly;
+using Polly.Retry;
 using PowerTrading.Reporting.IntraDayReport;
 
 namespace PowerTrading.Infrastructure.Csv;
 public class CsvExporter : ICsvExporter {
     private readonly CsvExporterSettings _settings;
     private readonly ITime _time;
+    private readonly ILogger<CsvExporter> _logger;
+    private readonly AsyncRetryPolicy _retryPolicy;
 
-    public CsvExporter(ITime time, IOptions<CsvExporterSettings> options) {
+    public CsvExporter(ITime time, IOptions<CsvExporterSettings> options, ILogger<CsvExporter> logger) {
         _settings = options.Value;
         _time = time;
+        _logger = logger;
+        _retryPolicy = Policy
+            .Handle<Exception>(ex => !(ex is OperationCanceledException))
+            .WaitAndRetryAsync(
+                3,
+                retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
+                onRetry: (exception, timespan, retryCount, context) => {
+                    _logger.LogWarning("Retry {RetryCount} after {TotalSeconds}s due to: {ExceptionMessage}", retryCount, timespan.TotalSeconds, exception.Message);
+                });
     }
 
     public async Task<string> Export(List<PowerTrading.Domain.PowerPosition> powerPositions, CancellationToken token) {
@@ -23,7 +37,10 @@ public class CsvExporter : ICsvExporter {
         if (!Directory.Exists(_settings.OutputFolder)) {
             Directory.CreateDirectory(_settings.OutputFolder);
         }
-        await File.WriteAllTextAsync(reportPath, reportContent, Encoding.UTF8, token);
+
+        await _retryPolicy.ExecuteAsync(async ct => {
+            await File.WriteAllTextAsync(reportPath, reportContent, Encoding.UTF8, ct);
+        }, token);
 
         return reportPath;
     }

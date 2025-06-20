@@ -1,10 +1,12 @@
-﻿using Microsoft.Extensions.Options;
+﻿using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using PowerTrading.Domain;
 using PowerTrading.Infrastructure.Csv;
 using PowerTrading.Reporting.IntraDayReport;
 
 namespace PowerTrading.Tests;
 public class IntraDayReportServiceIntegrationTests {
+    private readonly Mock<ILogger<CsvExporter>> _mockLogger = new Mock<ILogger<CsvExporter>>();
 
     [Fact]
     public async Task GenerateAsync_CreatesCsvFile_WithCorrectContent() {
@@ -23,7 +25,7 @@ public class IntraDayReportServiceIntegrationTests {
         mockTime
             .Setup(t => t.GetTime(It.IsAny<DateTime?>()))
             .Returns(now);
-        var csvExporter = new CsvExporter(mockTime.Object, csvSettings);
+        var csvExporter = new CsvExporter(mockTime.Object, csvSettings, _mockLogger.Object);
 
         var dummyTrades = new List<PowerTrade>
         {
