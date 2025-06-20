@@ -21,7 +21,7 @@ public class CsvExporter : ICsvExporter {
             .Handle<Exception>(ex => !(ex is OperationCanceledException))
             .WaitAndRetryAsync(
                 3,
-                retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)),
+                retryAttempt => TimeSpan.FromSeconds(retryAttempt),
                 onRetry: (exception, timespan, retryCount, context) => {
                     _logger.LogWarning("Retry {RetryCount} after {TotalSeconds}s due to: {ExceptionMessage}", retryCount, timespan.TotalSeconds, exception.Message);
                 });

@@ -23,7 +23,7 @@ public class PowerServiceClient : IPowerServiceClient {
             .Handle<Exception>(ex => !(ex is OperationCanceledException))
             .WaitAndRetryAsync(
                 retryCount: 3,
-                sleepDurationProvider: attempt => TimeSpan.FromSeconds(Math.Pow(1.5, attempt)),
+                sleepDurationProvider: attempt => TimeSpan.FromSeconds( attempt),
                 onRetry: (exception, timespan, retryCount, context) => {
                     _logger.LogWarning("Retry {RetryCount} after {TotalSeconds}s due to: {ExceptionMessage}", retryCount, timespan.TotalSeconds, exception.Exception.Message);
                 });
