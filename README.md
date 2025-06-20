@@ -2,7 +2,8 @@
 
 ## Overview
 
-This solution implements a **reliable Windows Service** for generating intra-day power position reports for power traders.
+Power traders need a report generated during the day (intra-day) that shows how much electricity they will have bought or sold for each hour of the next day (the “day-ahead power position”). This helps them plan and manage their trading positions in advance.
+This solution implements a **reliable Windows Service** for generating intra-day power position reports.
 
 # Modules and Responsibilities
 
