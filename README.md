@@ -5,6 +5,32 @@
 Power traders need a report generated during the day (intra-day) that shows how much electricity they will have bought or sold for each hour of the next day (the “day-ahead power position”). This helps them plan and manage their trading positions in advance.
 This solution implements a **reliable Windows Service** for generating intra-day power position reports.
 
+# Requirements
+
+## Explicitly Referenced in the Assignment
+- Scheduled extraction runs at configured intervals
+- Immediate initial run on service start
+- Aggregation of power trade volumes per hour (starting from 23:00 the previous day)
+- Output CSV file with correct formatting, naming, and storage location
+- Retry logic for transient failures (data fetching, file writing)
+- Graceful cancellation and shutdown support
+- Ensuring no scheduled extract run is missed (reliability)
+
+## Implicitly Referenced or Inferred from the Assignment (nice to have)
+- Proper logging for events, errors, and retries
+- Configuration driven (intervals, paths)
+- Clean architecture with separation of concerns
+- Use of asynchronous programming with cancellation tokens
+- Robust error handling and resilience patterns (e.g., Polly retries)
+- Readability — Clear, consistent, and understandable code
+- Modularity — Logical separation of concerns and components
+- Traceability — Meaningful logging, error messages, and auditability
+- Scalability — Ability to handle growing data or load gracefully
+- Security — Secure handling of data and failures (e.g., no sensitive info leakage)
+- Error prompt — User or operator-friendly error reporting
+- Testable — Well-structured for unit and integration testing
+
+
 # Modules and Responsibilities
 
 ## PowerTrading.WindowsService
