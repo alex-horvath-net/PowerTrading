@@ -7,16 +7,23 @@ This solution implements a **reliable Windows Service** for generating intra-day
 
 # Requirements
 
-## Explicitly Referenced in the Assignment
-- Scheduled extraction runs at configured intervals
-- Immediate initial run on service start
-- Aggregation of power trade volumes per hour (starting from 23:00 the previous day)
-- Output CSV file with correct formatting, naming, and storage location
+## Explicitly Referenced in the Assignment (primary goal)
+- Must be implemented as a Windows service using .NET 6.0 C#
+- All trade positions must be aggregated per hour (local/wall clock time), starting at 23:00 the previous day (London local time)
+- CSV output must have two columns, Local Time (24hr HH:MM) and Volume, with the first row as a header
+- CSV filename must be in the format PowerPosition_YYYYMMDD_HHMM.csv, reflecting local extract time
+- CSV file location must be configurable and read from the application configuration file
+- Extraction must run at a scheduled interval (every X minutes), configurable via the application configuration file
+- It is acceptable for the extract to run within +/- 1 minute of the configured interval
+- It is not acceptable to miss a scheduled extract
+- An extract must run immediately on service start and then continue at the configured interval
+- The service only needs to read the configuration at startup; config changes require service restart
+- The service must provide adequate logging for production support and diagnostics
+
+## Implicitly Referenced or Inferred from the Assignment (secondary goal)
+- Overlapping execution should be handled.
 - Retry logic for transient failures (data fetching, file writing)
 - Graceful cancellation and shutdown support
-- Ensuring no scheduled extract run is missed (reliability)
-
-## Implicitly Referenced or Inferred from the Assignment (nice to have)
 - Proper logging for events, errors, and retries
 - Configuration driven (intervals, paths)
 - Clean architecture with separation of concerns
