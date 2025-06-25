@@ -34,7 +34,7 @@ namespace PowerTrading.WindowsService {
             _processingStartLockRetryPolicy = Policy
                 .HandleResult<bool>(acquired => !acquired)
                 .WaitAndRetryAsync(
-                    retryCount: 5,
+                    retryCount: 3,
                     sleepDurationProvider: attempt => TimeSpan.FromSeconds(2),
                     onRetry: (result, timespan, retryCount, context) => {
                         _logger.LogWarning("Attempt {RetryCount} to acquire processing start lock failed, retrying in {Delay}.",
@@ -65,14 +65,48 @@ namespace PowerTrading.WindowsService {
             DateTime runTime = default;
 
             try {
-                var interval = TimeSpan.FromMinutes(_settings.ExtractIntervalMinutes);
 
                 while (!token.IsCancellationRequested) {
                     (runId, runTime) = EnqueueNewRunPlan();
 
                     // Trigger processing task asynchronously if not already running.
-                    await TriggerProcessingTaskIfNeeded(token);
+                    bool lockAcquired = false;
 
+                    try {
+                        lockAcquired = await _processingStartLockRetryPolicy.ExecuteAsync(async ct =>
+                                       await _processingStartLock.WaitAsync(1 * 1000, ct), token);
+
+                        if (!lockAcquired) {
+                            _logger.LogWarning("Failed to acquire execution lock after retries. Skipping processing start.");
+                            return;
+                        }
+
+                        _logger.LogInformation("Execution lock acquired.");
+
+                        if (_processingTask != null && !_processingTask.IsCompleted) {
+                            _logger.LogWarning("Processing task already running. Skipping new start.");
+                            return;
+                        }
+
+                        _logger.LogInformation("Execution task is idle.");
+
+                        if (token.IsCancellationRequested) {
+                            _logger.LogWarning("Cancellation requested before starting processing task.");
+                            return;
+                        }
+
+                        _logger.LogInformation("CancellationToken is idle.");
+
+                        _processingTask = ProcessRunPlans(token);
+
+                    } finally {
+                        if (lockAcquired) {
+                            _processingStartLock.Release();
+                            _logger.LogDebug("Released execution lock.");
+                        }
+                    }
+
+                    var interval = TimeSpan.FromMinutes(_settings.ExtractIntervalMinutes);
                     await Task.Delay(interval, token);
                 }
             } catch (OperationCanceledException) {
@@ -104,39 +138,7 @@ namespace PowerTrading.WindowsService {
             return (runId, runTime);
         }
 
-        /// <summary>
-        /// Attempts to acquire the semaphore with retry logic and triggers processing task if not already running.
-        /// </summary>
-        private async Task TriggerProcessingTaskIfNeeded(CancellationToken token) {
-            bool lockAcquired = false;
 
-            try {
-                lockAcquired = await _processingStartLockRetryPolicy.ExecuteAsync(async ct =>
-                               await _processingStartLock.WaitAsync(TimeSpan.FromSeconds(3), ct), token);
-
-                if (!lockAcquired) {
-                    _logger.LogWarning("Failed to acquire processing start lock after retries. Skipping processing start.");
-                    return;
-                }
-
-                if (_processingTask != null && !_processingTask.IsCompleted) {
-                    _logger.LogWarning("Processing task already running. Skipping new start.");
-                    return;
-                }
-
-                if (token.IsCancellationRequested) {
-                    _logger.LogInformation("Cancellation requested before starting processing task.");
-                    return;
-                }
-
-                _processingTask = ProcessRunPlans(token);
-            } finally {
-                if (lockAcquired) {
-                    _processingStartLock.Release();
-                    _logger.LogDebug("Released processing start lock.");
-                }
-            }
-        }
 
 
         /// <summary>
