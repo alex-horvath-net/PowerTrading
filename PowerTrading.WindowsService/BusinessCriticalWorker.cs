@@ -76,12 +76,12 @@ namespace PowerTrading.WindowsService {
                     await Task.Delay(interval, token);
                 }
             } catch (OperationCanceledException) {
-                _logger.LogInformation("Execution loop cancelled RunTime: {RunTime} RunId: {RunId}", runTime, runId);
+                _logger.LogInformation("Execution loop cancelled. RunTime: {RunTime} RunId: {RunId}", runTime, runId);
             } catch (Exception ex) {
-                _logger.LogError(ex, "Unexpected error in execution loop RunTime: {RunTime} RunId: {RunId}", runTime, runId);
+                _logger.LogError(ex, "Unexpected error in execution loop. RunTime: {RunTime} RunId: {RunId}", runTime, runId);
                 throw;
             } finally {
-                _logger.LogInformation("Execution loop stopping RunTime: {RunTime} RunId: {RunId}", runTime, runId);
+                _logger.LogInformation("Execution loop stopping. RunTime: {RunTime} RunId: {RunId}", runTime, runId);
             }
         }
 
