@@ -2,6 +2,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Text;
 using Microsoft.Extensions.Options;
+using Polly;
+using Polly.Retry;
 using PowerTrading.Reporting.IntraDayReport;
 
 namespace PowerTrading.WindowsService {
@@ -13,6 +15,7 @@ namespace PowerTrading.WindowsService {
 
         private readonly ConcurrentQueue<Tuple<Guid, DateTime>> _RunPlans = new();
         private readonly SemaphoreSlim _processingStartLock = new(1, 1);
+        private readonly AsyncRetryPolicy<bool> _processingStartLockRetryPolicy;
 
         private Task? _processRunPlansTask;
         public Task? ProcessingTask => _processRunPlansTask;
@@ -20,6 +23,15 @@ namespace PowerTrading.WindowsService {
             _logger = logger;
             _settings = options.Value;
             _time = time;
+
+            _processingStartLockRetryPolicy = Policy
+                .HandleResult<bool>(acquired => acquired == false)
+                .WaitAndRetryAsync(
+                    retryCount: 5,
+                    sleepDurationProvider: attempt => TimeSpan.FromSeconds(2),
+                    onRetry: (result, timespan, retryCount, context) => {
+                        _logger.LogWarning("Attempt {RetryCount} to acquire processing start lock failed, retrying in {Delay}.", retryCount, timespan);
+                    });
         }
 
         public override async Task StartAsync(CancellationToken cancellationToken) {
@@ -82,37 +94,47 @@ namespace PowerTrading.WindowsService {
             return (runId, runTime);
         }
 
+        private async Task<bool> IsOverlapped(CancellationToken token) {
+            _logger.LogDebug("Waiting to enter processing start lock...");
+            var  isStarted = await _processingStartLockRetryPolicy.ExecuteAsync(ct =>
+                                    _processingStartLock.WaitAsync(TimeSpan.FromSeconds(3), ct), token);
+
+            _logger.LogDebug("Entered processing start lock.");
+            if (!isStarted) {
+                _logger.LogWarning("Skipping processing due overlapping execution.");
+            }
+
+            return isStarted;
+        }
+
+        private bool isRunning() {
+            var isRunning = _processRunPlansTask != null && !_processRunPlansTask.IsCompleted;
+            if (isRunning) {
+                _logger.LogWarning("Skipping processing due processing is still running.");
+            }
+            return isRunning;
+        }
+
+        private bool IsCancelled(CancellationToken token) {
+            if (token.IsCancellationRequested) {
+                _logger.LogInformation("Cancellation requested before starting processing task.");
+                return true;
+            }
+            return false;
+        }
         private async Task FireAndForgetProcessRunPlansTaskWithoutOverlapping(CancellationToken token) {
-            var isStarted = false;
+            var isOverlapped = false;
 
             try {
-                _logger.LogDebug("Waiting to enter processing start lock...");
-                isStarted = await _processingStartLock.WaitAsync(60 * 60 * 1000, token);
-                _logger.LogDebug("Entered processing start lock.");
-                if (!isStarted) {
-                    _logger.LogWarning("Skipping processing due overlapping execution.");
-                    return; // Skip processing if already running
+                
+                isOverlapped = await IsOverlapped(token);
+                if (isOverlapped || isRunning() || IsCancelled(token)) {
+                    return; 
                 }
 
-                var isRuning = _processRunPlansTask != null && !_processRunPlansTask.IsCompleted;
-                if (isRuning) {
-                    _logger.LogWarning("Skipping processing due processing is still running.");
-                    return; // Skip processing if already running
-                }
-
-                if (token.IsCancellationRequested) {
-                    _logger.LogInformation("Cancellation requested before starting processing task.");
-                    return;
-                }
-
-                // fier and forget the processing task
+                // fire and forget the processing task
                 // this approach allows the service to continue scheduling new runs without waiting for processing to complete,
-                _processRunPlansTask = ProcessRunPlans(token).ContinueWith(t =>
-                {
-                    if (t.IsFaulted) {
-                        _logger.LogError(t.Exception, "Processing task faulted");
-                    }
-                }, TaskContinuationOptions.OnlyOnFaulted);
+                _processRunPlansTask = ProcessRunPlans(token);
 
 
             } finally {
@@ -120,7 +142,7 @@ namespace PowerTrading.WindowsService {
                 // This ensures we don't leave it locked if we never entered the processing
                 // loop due to overlapping execution.
 
-                if (isStarted) {
+                if (isOverlapped) {
                     _processingStartLock.Release();
                     _logger.LogDebug("Released processing start lock.");
                 }
@@ -130,12 +152,12 @@ namespace PowerTrading.WindowsService {
         private async Task ProcessRunPlans(CancellationToken token) {
 
             while (_RunPlans.TryDequeue(out var schedule)) {
-                token.ThrowIfCancellationRequested();
                 var runId = schedule.Item1;
                 var runTime = schedule.Item2;
                 try {
                     _logger.LogInformation("Starting work for RunTime {RunTime} RunId: {RunId} ", runTime, runId);
 
+                    token.ThrowIfCancellationRequested();
                     await WorkAsync(runId, runTime, token);
                     token.ThrowIfCancellationRequested();
 
