@@ -7,30 +7,38 @@ using Polly.Retry;
 using PowerTrading.Reporting.IntraDayReport;
 
 namespace PowerTrading.WindowsService {
+    /// <summary>
+    /// Base class for a background worker that schedules and processes run plans without overlapping executions.
+    /// </summary>
     public abstract class BusinessCriticalWorker<TWorker> : BackgroundService {
-
         protected readonly ILogger<TWorker> _logger;
         private readonly WorkerSettings _settings;
         private readonly ITime _time;
 
-        private readonly ConcurrentQueue<Tuple<Guid, DateTime>> _RunPlans = new();
+        private readonly ConcurrentQueue<Tuple<Guid, DateTime>> _runPlans = new();
+
+        // Semaphore to serialize starting the processing task.
         private readonly SemaphoreSlim _processingStartLock = new(1, 1);
+
+        // Polly retry policy to acquire semaphore with retries and delays.
         private readonly AsyncRetryPolicy<bool> _processingStartLockRetryPolicy;
 
-        private Task? _processRunPlansTask;
-        public Task? ProcessingTask => _processRunPlansTask;
+        private Task? _processingTask;
+        public Task? ProcessingTask => _processingTask;
+
         public BusinessCriticalWorker(ILogger<TWorker> logger, IOptions<WorkerSettings> options, ITime time) {
             _logger = logger;
             _settings = options.Value;
             _time = time;
 
             _processingStartLockRetryPolicy = Policy
-                .HandleResult<bool>(acquired => acquired == false)
+                .HandleResult<bool>(acquired => !acquired)
                 .WaitAndRetryAsync(
                     retryCount: 5,
                     sleepDurationProvider: attempt => TimeSpan.FromSeconds(2),
                     onRetry: (result, timespan, retryCount, context) => {
-                        _logger.LogWarning("Attempt {RetryCount} to acquire processing start lock failed, retrying in {Delay}.", retryCount, timespan);
+                        _logger.LogWarning("Attempt {RetryCount} to acquire processing start lock failed, retrying in {Delay}.",
+                            retryCount, timespan);
                     });
         }
 
@@ -41,16 +49,15 @@ namespace PowerTrading.WindowsService {
 
         public override async Task StopAsync(CancellationToken cancellationToken) {
             _logger.LogInformation("Service stopping...");
-            if (_processRunPlansTask != null) {
+            if (_processingTask != null) {
                 try {
-                    await _processRunPlansTask.WaitAsync(cancellationToken);
+                    await _processingTask.WaitAsync(cancellationToken);
                 } catch (OperationCanceledException) {
                     _logger.LogInformation("Processing task cancelled during shutdown.");
                 }
             }
             await base.StopAsync(cancellationToken);
         }
-
 
         protected override async Task ExecuteAsync(CancellationToken token) {
             _logger.LogInformation("Execution loop starting...");
@@ -61,119 +68,108 @@ namespace PowerTrading.WindowsService {
                 var interval = TimeSpan.FromMinutes(_settings.ExtractIntervalMinutes);
 
                 while (!token.IsCancellationRequested) {
-                    (runId, runTime) = PlaceANewRunPlan();
+                    (runId, runTime) = EnqueueNewRunPlan();
 
-                    await FireAndForgetProcessRunPlansTaskWithoutOverlapping(token);
-                    // this comment line might run on new thread, and hits almost imadiatelly,
-                    // because the internal _processRunPlansTask is started, but not waited.
+                    // Trigger processing task asynchronously if not already running.
+                    await TriggerProcessingTaskIfNeeded(token);
 
                     await Task.Delay(interval, token);
-                    // _processRunPlansTask might still running in the background, 
-                    // so the next loop potentially could overlap with this current loop.
                 }
             } catch (OperationCanceledException) {
-                _logger.LogInformation("Execution loop cancelled  RunTime: {RunTime} RunId: {RunId} ", runTime, runId);
+                _logger.LogInformation("Execution loop cancelled RunTime: {RunTime} RunId: {RunId}", runTime, runId);
             } catch (Exception ex) {
-                _logger.LogError(ex, "Unexpected error in execution loop RunTime: {RunTime} RunId: {RunId} ", runTime, runId);
+                _logger.LogError(ex, "Unexpected error in execution loop RunTime: {RunTime} RunId: {RunId}", runTime, runId);
                 throw;
             } finally {
-                _logger.LogInformation("Execution loop stopping. RunTime: {RunTime} RunId: {RunId} ", runTime, runId);
+                _logger.LogInformation("Execution loop stopping RunTime: {RunTime} RunId: {RunId}", runTime, runId);
             }
         }
 
-        private (Guid, DateTime) PlaceANewRunPlan() {
+        /// <summary>
+        /// Enqueues a new run plan with unique RunId and current run time.
+        /// Logs backlog size if exceeding threshold.
+        /// </summary>
+        private (Guid, DateTime) EnqueueNewRunPlan() {
             var runId = Guid.NewGuid();
             var runTime = _time.GetTime();
-            _RunPlans.Enqueue(Tuple.Create(runId, runTime)); // mutiple threads can enqueue safely
-            if (_RunPlans.Count > 10) { // example threshold, adjust as needed
-                _logger.LogWarning("Backlog size is high: {BacklogCount} scheduled runs pending processing.", _RunPlans.Count);
-            }
-            _logger.LogInformation("Scheduled run enqueued for RunTime: {RunTime} RunId: {RunId} ", runTime, runId);
+            _runPlans.Enqueue(Tuple.Create(runId, runTime));
 
+            if (_runPlans.Count > 10) // Adjust threshold as needed
+            {
+                _logger.LogWarning("Backlog size is high: {BacklogCount} scheduled runs pending processing.", _runPlans.Count);
+            }
+
+            _logger.LogInformation("Scheduled run enqueued for RunTime: {RunTime} RunId: {RunId}", runTime, runId);
 
             return (runId, runTime);
         }
 
-        private async Task<bool> IsOverlapped(CancellationToken token) {
-            _logger.LogDebug("Waiting for new lock...");
-            var  canRun = await _processingStartLockRetryPolicy.ExecuteAsync(ct =>
-                                    _processingStartLock.WaitAsync(TimeSpan.FromSeconds(3), ct), token);
-
-            if (canRun) {
-                _logger.LogWarning("New lock is established.");
-
-            } else {
-                _logger.LogWarning("New lock is rejected, due overlapping execution.");
-
-            }
-
-            return !canRun;
-        }
-
-        private bool isRunning() {
-            var isRunning = _processRunPlansTask != null && !_processRunPlansTask.IsCompleted;
-            if (isRunning) {
-                _logger.LogWarning("Skipping processing due processing is still running.");
-            }
-            return isRunning;
-        }
-
-        private bool IsCancelled(CancellationToken token) {
-            if (token.IsCancellationRequested) {
-                _logger.LogInformation("Cancellation requested before starting processing task.");
-                return true;
-            }
-            return false;
-        }
-        private async Task FireAndForgetProcessRunPlansTaskWithoutOverlapping(CancellationToken token) {
-            var isOverlapped = false;
+        /// <summary>
+        /// Attempts to acquire the semaphore with retry logic and triggers processing task if not already running.
+        /// </summary>
+        private async Task TriggerProcessingTaskIfNeeded(CancellationToken token) {
+            bool lockAcquired = false;
 
             try {
-                
-                isOverlapped = await IsOverlapped(token);
-                if (isOverlapped || isRunning() || IsCancelled(token)) {
-                    return; 
+                lockAcquired = await _processingStartLockRetryPolicy.ExecuteAsync(async ct =>
+                               await _processingStartLock.WaitAsync(TimeSpan.FromSeconds(3), ct), token);
+
+                if (!lockAcquired) {
+                    _logger.LogWarning("Failed to acquire processing start lock after retries. Skipping processing start.");
+                    return;
                 }
 
-                // fire and forget the processing task
-                // this approach allows the service to continue scheduling new runs without waiting for processing to complete,
-                _processRunPlansTask = ProcessRunPlans(token);
+                if (_processingTask != null && !_processingTask.IsCompleted) {
+                    _logger.LogWarning("Processing task already running. Skipping new start.");
+                    return;
+                }
 
+                if (token.IsCancellationRequested) {
+                    _logger.LogInformation("Cancellation requested before starting processing task.");
+                    return;
+                }
 
+                _processingTask = ProcessRunPlans(token);
             } finally {
-                // Release the semaphore only if we acquired it
-                // This ensures we don't leave it locked if we never entered the processing
-                // loop due to overlapping execution.
-
-                if (isOverlapped) {
+                if (lockAcquired) {
                     _processingStartLock.Release();
                     _logger.LogDebug("Released processing start lock.");
                 }
             }
         }
 
-        private async Task ProcessRunPlans(CancellationToken token) {
 
-            while (_RunPlans.TryDequeue(out var schedule)) {
+        /// <summary>
+        /// Processes all queued run plans, handling exceptions and respecting cancellation.
+        /// </summary>
+        private async Task ProcessRunPlans(CancellationToken token) {
+            while (_runPlans.TryDequeue(out var schedule)) {
+                token.ThrowIfCancellationRequested();
+
                 var runId = schedule.Item1;
                 var runTime = schedule.Item2;
+
                 try {
-                    _logger.LogInformation("Starting work for RunTime {RunTime} RunId: {RunId} ", runTime, runId);
+                    _logger.LogInformation("Starting work for RunTime {RunTime} RunId: {RunId}", runTime, runId);
 
-                    token.ThrowIfCancellationRequested();
                     await WorkAsync(runId, runTime, token);
+
                     token.ThrowIfCancellationRequested();
 
-                    _logger.LogInformation("Completed work for RunTime {RunTime} RunId: {RunId} ", runTime, runId);
+                    _logger.LogInformation("Completed work for RunTime {RunTime} RunId: {RunId}", runTime, runId);
                 } catch (OperationCanceledException) {
-                    _logger.LogWarning("Work cancelled.RunTime {RunTime} RunId: {RunId} ", runTime, runId);
-                    throw; // Propagate cancellation
+                    _logger.LogWarning("Work cancelled RunTime {RunTime} RunId: {RunId}", runTime, runId);
+                    throw;
                 } catch (Exception ex) {
-                    _logger.LogError(ex, "Error processing scheduled RunTime {RunTime} RunId: {RunId} ", runTime, runId);
-                    // Swallow other exceptions so loop continues
+                    _logger.LogError(ex, "Error processing scheduled RunTime {RunTime} RunId: {RunId}", runTime, runId);
+                    // Continue processing despite errors.
                 }
             }
         }
+
+        /// <summary>
+        /// Abstract method to be implemented for actual work processing.
+        /// </summary>
         public abstract Task WorkAsync(Guid runId, DateTime runTime, CancellationToken token);
 
         public override void Dispose() {
