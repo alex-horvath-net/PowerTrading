@@ -11,16 +11,13 @@ namespace PowerTrading.WindowsService {
         private readonly WorkerSettings _settings;
         private readonly ITime _time;
 
-        private readonly ConcurrentQueue<Tuple<Guid, DateTime>> _scheduledRuns = new();
-        private readonly SemaphoreSlim _semaphore = new(1, 1);
-        private readonly SemaphoreSlim _processingLock = new(1, 1);
+        private readonly ConcurrentQueue<Tuple<Guid, DateTime>> _RunPlans = new();
+        private readonly SemaphoreSlim _avoidOverlappingLoopsFirstGate = new(1, 1);
+        private readonly SemaphoreSlim _avoidOverlappingLoopsSeccondGate = new(1, 1);
 
-        private Task? _processingTask;
-        public Task? ProcessingTask => _processingTask;
-        public BusinessCriticalWorker(
-            ILogger<TWorker> logger,
-            IOptions<WorkerSettings> options,
-            ITime time) {
+        private Task? _processRunPlansTask;
+        public Task? ProcessingTask => _processRunPlansTask;
+        public BusinessCriticalWorker(ILogger<TWorker> logger, IOptions<WorkerSettings> options, ITime time) {
             _logger = logger;
             _settings = options.Value;
             _time = time;
@@ -45,17 +42,18 @@ namespace PowerTrading.WindowsService {
                 var interval = TimeSpan.FromMinutes(_settings.ExtractIntervalMinutes);
 
                 while (!token.IsCancellationRequested) {
-                    runId = Guid.NewGuid();
-                    runTime = _time.GetTime();
-                    _scheduledRuns.Enqueue(Tuple.Create(runId, runTime));
-                    _logger.LogInformation("Scheduled run enqueued for RunTime: {RunTime} RunId: {RunId} ",  runTime, runId);
+                    (runId, runTime) = PlaceANewRunPlan();
 
-                    await StartProcessorIfNotRunningAsync(token);
+                    await FierAndForgetProcessRunPlansTaskWithoutOerlaping(token);
+                    // this comment line might run on new thread, and hits almost imadiatelly,
+                    // because the internal _processRunPlansTask is started, but not waited.
 
                     await Task.Delay(interval, token);
+                    // _processRunPlansTask might still running in the background, 
+                    // so the next loop potentially could overlap with this current loop.
                 }
             } catch (OperationCanceledException) {
-                _logger.LogInformation("Execution loop cancelled  RunTime: {RunTime} RunId: {RunId} ",  runTime, runId);
+                _logger.LogInformation("Execution loop cancelled  RunTime: {RunTime} RunId: {RunId} ", runTime, runId);
             } catch (Exception ex) {
                 _logger.LogError(ex, "Unexpected error in execution loop RunTime: {RunTime} RunId: {RunId} ", runTime, runId);
                 throw;
@@ -64,52 +62,82 @@ namespace PowerTrading.WindowsService {
             }
         }
 
-        private async Task StartProcessorIfNotRunningAsync(CancellationToken token) {
-            await _processingLock.WaitAsync(token);
+        private (Guid, DateTime) PlaceANewRunPlan() {
+            var runId = Guid.NewGuid();
+            var runTime = _time.GetTime();
+            _RunPlans.Enqueue(Tuple.Create(runId, runTime)); // mutiple threads can enqueue safely
+            _logger.LogInformation("Scheduled run enqueued for RunTime: {RunTime} RunId: {RunId} ", runTime, runId);
+            return (runId, runTime);
+        }
+
+        private async Task FierAndForgetProcessRunPlansTaskWithoutOerlaping(CancellationToken token) {
+            var firstGateIsOpen = false;
+            var secondGateIsOpen = false;
+
             try {
-                if (_processingTask == null || _processingTask.IsCompleted) {
-                    _processingTask = ProcessQueueAsync(token);
+                firstGateIsOpen = await _avoidOverlappingLoopsFirstGate.WaitAsync(60 * 60 * 1000, token);
+                if (!firstGateIsOpen) {
+                    _logger.LogWarning("Skipping processing due first gate is cloed, because of overlapping execution.");
+                    return; // Skip processing if already running
                 }
+
+                var isRuning = _processRunPlansTask != null && !_processRunPlansTask.IsCompleted;
+                if (isRuning) {
+                    _logger.LogWarning("Skipping processing due processing is still running.");
+                    return; // Skip processing if already running
+                }
+
+                secondGateIsOpen = await _avoidOverlappingLoopsSeccondGate.WaitAsync(0, token);
+                if (!secondGateIsOpen) {
+                    _logger.LogWarning("Skipping processing due seccond gate is cloed, because of overlapping execution.");
+                    return; // Skip processing if already running
+                }
+
+
+                // fier and forget the processing task
+                // there is no need to await here, we want to start processing in the background
+                _processRunPlansTask = ProcessRunPlans(token);
+
             } finally {
-                _processingLock.Release();
+                // Release the semaphore only if we acquired it
+                // This ensures we don't leave it locked if we never entered the processing
+                // loop due to overlapping execution.
+
+                if (firstGateIsOpen)
+                    _avoidOverlappingLoopsFirstGate.Release();
+
+                if (secondGateIsOpen)
+                    _avoidOverlappingLoopsSeccondGate.Release();
             }
         }
 
-        private async Task ProcessQueueAsync(CancellationToken token) {
-            if (!await _semaphore.WaitAsync(0, token)) {
-                _logger.LogInformation("Processor already running, skipping invocation.");
-                return;
-            }
+        private async Task ProcessRunPlans(CancellationToken token) {
 
-            try {
-                while (_scheduledRuns.TryDequeue(out var schedule)) {
-                    token.ThrowIfCancellationRequested();
-                    var runId = schedule.Item1;
-                    var runTime = schedule.Item2;
-                    try {
-                        _logger.LogInformation("Starting work for RunTime {RunTime} RunId: {RunId} ", runTime, runId);
+            while (_RunPlans.TryDequeue(out var schedule)) {
+                token.ThrowIfCancellationRequested();
+                var runId = schedule.Item1;
+                var runTime = schedule.Item2;
+                try {
+                    _logger.LogInformation("Starting work for RunTime {RunTime} RunId: {RunId} ", runTime, runId);
 
-                        await WorkAsync(runId, runTime, token);
+                    await WorkAsync(runId, runTime, token);
 
-                        _logger.LogInformation("Completed work for RunTime {RunTime} RunId: {RunId} ", runTime, runId);
-                    } catch (OperationCanceledException) {
-                        _logger.LogWarning("Work cancelled.");
-                        throw; // Propagate cancellation
-                    } catch (Exception ex) {
-                        _logger.LogError(ex, "Error processing scheduled RunTime {RunTime} RunId: {RunId} ", runTime, runId);
-                        // Swallow other exceptions so loop continues
-                    }
+                    _logger.LogInformation("Completed work for RunTime {RunTime} RunId: {RunId} ", runTime, runId);
+                } catch (OperationCanceledException) {
+                    _logger.LogWarning("Work cancelled.");
+                    throw; // Propagate cancellation
+                } catch (Exception ex) {
+                    _logger.LogError(ex, "Error processing scheduled RunTime {RunTime} RunId: {RunId} ", runTime, runId);
+                    // Swallow other exceptions so loop continues
                 }
-            } finally {
-                _semaphore.Release();
             }
         }
         public abstract Task WorkAsync(Guid runId, DateTime runTime, CancellationToken token);
 
         public override void Dispose() {
             base.Dispose();
-            _processingLock.Dispose();
-            _semaphore.Dispose();
+            _avoidOverlappingLoopsFirstGate?.Dispose();
+            _avoidOverlappingLoopsSeccondGate?.Dispose();
         }
     }
 }
