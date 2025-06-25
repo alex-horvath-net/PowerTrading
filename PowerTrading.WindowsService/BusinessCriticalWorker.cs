@@ -95,16 +95,19 @@ namespace PowerTrading.WindowsService {
         }
 
         private async Task<bool> IsOverlapped(CancellationToken token) {
-            _logger.LogDebug("Waiting to enter processing start lock...");
-            var  isStarted = await _processingStartLockRetryPolicy.ExecuteAsync(ct =>
+            _logger.LogDebug("Waiting for new lock...");
+            var  canRun = await _processingStartLockRetryPolicy.ExecuteAsync(ct =>
                                     _processingStartLock.WaitAsync(TimeSpan.FromSeconds(3), ct), token);
 
-            _logger.LogDebug("Entered processing start lock.");
-            if (!isStarted) {
-                _logger.LogWarning("Skipping processing due overlapping execution.");
+            if (canRun) {
+                _logger.LogWarning("New lock is established.");
+
+            } else {
+                _logger.LogWarning("New lock is rejected, due overlapping execution.");
+
             }
 
-            return isStarted;
+            return !canRun;
         }
 
         private bool isRunning() {

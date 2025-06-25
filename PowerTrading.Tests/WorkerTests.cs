@@ -20,35 +20,44 @@ public class WorkerTests {
     }
 
     [Fact]
-    public async Task HappyPath_WorkAsync_Is_Called_At_Least_Once() {
+    public async Task HappyPath_Logs_CompletedWork_At_LeastOnce() {
         // Arrange
         var cts = new CancellationTokenSource();
-        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         _mockReportService
             .Setup(s => s.GenerateAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("fakepath")
-            .Callback(() => tcs.TrySetResult(true));
+            .ReturnsAsync("fakepath");
 
-        // Act
         await _worker.StartAsync(cts.Token);
         var executeTask = _worker.ProcessingTask;
 
-        // Wait for work to start
-        var completedTask = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(5)));
+        // Wait some time to let the processing run at least once
+        await Task.Delay(2000);
 
-        // Assert
-        completedTask.Should().Be(tcs.Task, "WorkAsync should have been called within timeout");
-        _mockReportService.Verify(s => s.GenerateAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce);
-
-        // Cleanup
+        // Cancel to stop the worker gracefully
         cts.Cancel();
+
         if (executeTask != null) {
-            try { await executeTask; } catch (OperationCanceledException) { }
+            try {
+                await executeTask;
+            } catch (OperationCanceledException) {
+                // Expected on cancellation
+            }
         }
+
         await _worker.StopAsync(CancellationToken.None);
         _worker.Dispose();
+
+        // Assert: Verify that "Completed work" log was written at least once
+        _mockLogger.Verify(x => x.Log(
+            LogLevel.Information,
+            It.IsAny<EventId>(),
+            It.Is<It.IsAnyType>((v, _) => v.ToString().Contains("Completed work")),
+            null,
+            It.IsAny<Func<It.IsAnyType, Exception, string>>()),
+            Times.AtLeastOnce);
     }
+
 
     [Fact]
     public async Task Cancellation_Stops_Execution_Gracefully() {
