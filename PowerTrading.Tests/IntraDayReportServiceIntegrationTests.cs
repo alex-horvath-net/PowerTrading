@@ -102,7 +102,7 @@ public class IntraDayReportServiceIntegrationTests {
         var service = new IntraDayReportService(mockPowerServiceClient.Object, csvExporter);
 
         // Act
-        var reportPath = await service.GenerateAsync(now, CancellationToken.None);
+        var reportPath = await service.GenerateAsync(Guid.Empty, now, CancellationToken.None);
         var reportLines = await File.ReadAllLinesAsync(reportPath);
 
         // Assert

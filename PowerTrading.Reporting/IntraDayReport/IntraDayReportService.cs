@@ -3,7 +3,7 @@
 namespace PowerTrading.Reporting.IntraDayReport;
 
 public interface IIntraDayReportService {
-    Task<string> GenerateAsync(DateTime scheduledRun, CancellationToken token);
+    Task<string> GenerateAsync(Guid runId, DateTime runTime, CancellationToken token);
 }
 
 public class IntraDayReportService : IIntraDayReportService {
@@ -19,10 +19,10 @@ public class IntraDayReportService : IIntraDayReportService {
         _aggregator = new PowerPositionAggregator();
     }
 
-    public async Task<string> GenerateAsync(DateTime scheduledRun, CancellationToken token) {
+    public async Task<string> GenerateAsync(Guid runId, DateTime runTime, CancellationToken token) {
 
         // Extract
-         var powerTrades = await _powerServiceClient.GetTradesAsync(scheduledRun, token);
+         var powerTrades = await _powerServiceClient.GetTradesAsync(runTime, token);
 
         // Transform
         var powerPositions = _aggregator.AggregateByHour(powerTrades);
