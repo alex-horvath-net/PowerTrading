@@ -3,7 +3,7 @@
 namespace PowerTrading.Domain;
 public class PowerPositionAggregator {
 
-    public List<PowerPosition> AggregateByHour(IEnumerable<PowerTrade> trades) {
+    public List<PowerPosition> AggregateByHour(IEnumerable<PowerTrade> trades, Guid runId, DateTime runTime) {
         if (trades == null)
             throw new ArgumentNullException(nameof(trades));
 

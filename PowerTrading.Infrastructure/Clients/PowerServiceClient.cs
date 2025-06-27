@@ -18,20 +18,20 @@ public class PowerServiceClient : IPowerServiceClient {
         _nativePowerService = nativePowerService ?? throw new ArgumentNullException(nameof(nativePowerService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        // Define a retry policy: 3 retries with exponential backoff, ignoring cancellation exceptions
         _retryPolicy = Policy<IEnumerable<PowerTrade>>
             .Handle<Exception>(ex => !(ex is OperationCanceledException))
             .WaitAndRetryAsync(
                 retryCount: 3,
-                sleepDurationProvider: attempt => TimeSpan.FromSeconds( attempt),
+                sleepDurationProvider: attempt => TimeSpan.FromSeconds(attempt),
                 onRetry: (exception, timespan, retryCount, context) => {
                     _logger.LogWarning("Retry {RetryCount} after {TotalSeconds}s due to: {ExceptionMessage}", retryCount, timespan.TotalSeconds, exception.Exception.Message);
                 });
     }
 
-    public async Task<IEnumerable<Domain.PowerTrade>> GetTradesAsync(DateTime runTime, CancellationToken token) {
+    public async Task<IEnumerable<Domain.PowerTrade>> GetTradesAsync(Guid runId, DateTime runTime, CancellationToken token) {
         var nativePowerTrades = await GetTradesIfNotCanceledAsync(runTime, token);
         var domainPowerTrades = nativePowerTrades.Select(MapPowerTrade).ToArray();
+        _logger.LogInformation("Retrieved {TradeCount} trades for runId {RunId} at {RunTime}", domainPowerTrades.Length, runId, runTime);
         return domainPowerTrades; // PowerServiceClient doesn't leak any PowerService.dll type
     }
 

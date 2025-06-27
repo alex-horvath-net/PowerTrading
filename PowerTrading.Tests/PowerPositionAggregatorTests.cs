@@ -6,6 +6,9 @@ public class PowerPositionAggregatorTests {
     [Fact]
     public void AggregateByHour_ShouldSumVolumesPerPeriod() {
         // Arrange
+        var runId = Guid.Empty;
+        var runTime = new DateTime(2025, 6, 17, 21, 34, 0);
+
         var aggregator = new PowerPositionAggregator();
 
         var trades = new List<PowerTrade>
@@ -29,7 +32,7 @@ public class PowerPositionAggregatorTests {
         };
 
         // Act
-        var powerPositions = aggregator.AggregateByHour(trades);
+        var powerPositions = aggregator.AggregateByHour(trades, runId, runTime);
 
         // Assert
         powerPositions.Count.Should().Be(24); // Should have 24 periods
@@ -43,10 +46,13 @@ public class PowerPositionAggregatorTests {
         // Arrange
         var trades = GenerateTrades(1_00_000);
         var aggregator = new PowerPositionAggregator();
+        var runId = Guid.Empty;
+        var runTime = new DateTime(2025, 6, 17, 21, 34, 0);
+
 
         // Act
         var stopwatch = Stopwatch.StartNew();
-        var result = aggregator.AggregateByHour(trades);
+        var result = aggregator.AggregateByHour(trades, runId, runTime);
         stopwatch.Stop();
 
         // Assert basic correctness

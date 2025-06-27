@@ -9,13 +9,11 @@ using PowerTrading.Reporting.IntraDayReport;
 namespace PowerTrading.Infrastructure.Csv;
 public class CsvExporter : ICsvExporter {
     private readonly CsvExporterSettings _settings;
-    private readonly ITime _time;
     private readonly ILogger<CsvExporter> _logger;
     private readonly AsyncRetryPolicy _retryPolicy;
 
-    public CsvExporter(ITime time, IOptions<CsvExporterSettings> options, ILogger<CsvExporter> logger) {
+    public CsvExporter(IOptions<CsvExporterSettings> options, ILogger<CsvExporter> logger) {
         _settings = options.Value;
-        _time = time;
         _logger = logger;
         _retryPolicy = Policy
             .Handle<Exception>(ex => !(ex is OperationCanceledException))
@@ -27,10 +25,10 @@ public class CsvExporter : ICsvExporter {
                 });
     }
 
-    public async Task<string> Export(List<PowerTrading.Domain.PowerPosition> powerPositions, CancellationToken token) {
+    public async Task<string> Export(List<PowerTrading.Domain.PowerPosition> powerPositions, Guid runId, DateTime runTime, CancellationToken token) {
         token.ThrowIfCancellationRequested();
 
-        var reportName = GenerateFileName(_time.GetTime());
+        var reportName = GenerateFileName(runTime);
         var reportPath = Path.Combine(_settings.OutputFolder, reportName);
         var reportContent = GetCsvContent(powerPositions);
 
@@ -42,6 +40,7 @@ public class CsvExporter : ICsvExporter {
             await File.WriteAllTextAsync(reportPath, reportContent, Encoding.UTF8, ct);
         }, token);
 
+        _logger.LogInformation("CSV report generated at {ReportPath} for runId {RunId} at {RunTime}", reportPath, runId, runTime);
         return reportPath;
     }
 

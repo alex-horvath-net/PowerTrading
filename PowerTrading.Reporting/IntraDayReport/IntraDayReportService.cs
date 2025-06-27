@@ -22,13 +22,13 @@ public class IntraDayReportService : IIntraDayReportService {
     public async Task<string> GenerateAsync(Guid runId, DateTime runTime, CancellationToken token) {
 
         // Extract
-         var powerTrades = await _powerServiceClient.GetTradesAsync(runTime, token);
+         var powerTrades = await _powerServiceClient.GetTradesAsync(runId, runTime, token);
 
         // Transform
-        var powerPositions = _aggregator.AggregateByHour(powerTrades);
+        var powerPositions = _aggregator.AggregateByHour(powerTrades, runId, runTime);
 
         // Load
-        var intraDayReportPath = await _csvExporter.Export(powerPositions, token);
+        var intraDayReportPath = await _csvExporter.Export(powerPositions, runId, runTime, token);
 
         return intraDayReportPath;
     }

@@ -10,18 +10,16 @@ public class CsvExporterTests {
     [Fact]
     public async Task Export_CreatesCsvFileWithCorrectContent() {
         // Arrange
-        var now = new DateTime(2025, 6, 17, 21, 34, 0);
-        var mockTime = new Mock<ITime>();
-        mockTime
-            .Setup(t => t.GetTime(It.IsAny<DateTime?>()))
-            .Returns(now);
+        var runId = Guid.Empty;
+        var runTime = new DateTime(2025, 6, 17, 21, 34, 0);
+
 
         var options = Options.Create(new CsvExporterSettings {
             OutputFolder = Directory.GetCurrentDirectory(),
             Separator = ";",
             DecimalPlaces = 3
         });
-        var exporter = new CsvExporter(mockTime.Object, options, _mockLogger.Object);
+        var exporter = new CsvExporter(options, _mockLogger.Object);
         var powerPositions = new List<Domain.PowerPosition>
         {
             new Domain.PowerPosition { Period = 1, Volume = 100 },
@@ -29,7 +27,7 @@ public class CsvExporterTests {
         };
 
         // Act
-        var reportPath = await exporter.Export(powerPositions, CancellationToken.None);
+        var reportPath = await exporter.Export(powerPositions,runId, runTime, CancellationToken.None);
 
         // Assert
         reportPath.Should().EndWith("PowerPosition_20250617_2134.csv");

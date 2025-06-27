@@ -25,7 +25,7 @@ public class IntraDayReportServiceIntegrationTests {
         mockTime
             .Setup(t => t.GetTime(It.IsAny<DateTime?>()))
             .Returns(now);
-        var csvExporter = new CsvExporter(mockTime.Object, csvSettings, _mockLogger.Object);
+        var csvExporter = new CsvExporter( csvSettings, _mockLogger.Object);
 
         var dummyTrades = new List<PowerTrade>
         {
@@ -96,7 +96,7 @@ public class IntraDayReportServiceIntegrationTests {
 
 
         var mockPowerServiceClient = new Mock<IPowerServiceClient>();
-        mockPowerServiceClient.Setup(c => c.GetTradesAsync(It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+        mockPowerServiceClient.Setup(c => c.GetTradesAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
                               .ReturnsAsync(dummyTrades);
 
         var service = new IntraDayReportService(mockPowerServiceClient.Object, csvExporter);
